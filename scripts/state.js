@@ -23,11 +23,12 @@ function loadD(){
     settings:{currency:'TRY',theme:'',autoRate:true,recNotif:false,alertsEnabled:true},
     rates:{USD:38.5,EUR:42.1,GBP:49.0,XAU:3200,BTC:3500000},
     ratesUpdated:null,
+    ratesMeta:{fx:null,gold:null},
     consent:{receiptAi:false}
   };
   try{
     const s=JSON.parse(localStorage.getItem('fv5')||'{}');
-    const merged={...def,...s,settings:{...def.settings,...(s.settings||{})},rates:{...def.rates,...(s.rates||{})},consent:{...def.consent,...(s.consent||{})}};
+    const merged={...def,...s,settings:{...def.settings,...(s.settings||{})},rates:{...def.rates,...(s.rates||{})},ratesMeta:{...def.ratesMeta,...(s.ratesMeta||{})},consent:{...def.consent,...(s.consent||{})}};
     normalizeIds(merged);
     return merged;
   }catch{return def}
@@ -73,15 +74,58 @@ function txToTRY(amt,cxCode){
 
 async function fetchRates(){
   toast('Kurlar alınıyor…','amber');
+  const now=new Date().toISOString();
+  let fxOk=false,goldOk=false;
+
   try{
     const r=await fetch('https://api.exchangerate-api.com/v4/latest/TRY');
     if(!r.ok)throw 0;
     const d=await r.json();
-    D.rates.USD=1/d.rates.USD;D.rates.EUR=1/d.rates.EUR;
+    D.rates.USD=1/d.rates.USD;
+    D.rates.EUR=1/d.rates.EUR;
     if(d.rates.GBP)D.rates.GBP=1/d.rates.GBP;
-    D.ratesUpdated=new Date().toISOString();save();
-    toast('Kurlar güncellendi ✓','green');renderAll();
-  }catch{toast('Kur alınamadı, manuel değerler kullanılıyor','amber')}
+    fxOk=true;
+    D.ratesMeta.fx={source:'exchangerate-api (TRY base)',updatedAt:now};
+  }catch{
+    D.ratesMeta.fx={...(D.ratesMeta.fx||{}),status:'fallback'};
+  }
+
+  try{
+    const directRes=await fetch('https://api.exchangerate.host/latest?base=XAU&symbols=TRY');
+    if(!directRes.ok)throw 0;
+    const directData=await directRes.json();
+    const directRate=Number(directData?.rates?.TRY);
+    if(!directRate||!Number.isFinite(directRate))throw 0;
+    D.rates.XAU=directRate;
+    goldOk=true;
+    D.ratesMeta.gold={source:'exchangerate.host (XAU/TRY)',updatedAt:now};
+  }catch{
+    try{
+      const xauUsdRes=await fetch('https://api.exchangerate.host/latest?base=XAU&symbols=USD');
+      if(!xauUsdRes.ok)throw 0;
+      const xauUsdData=await xauUsdRes.json();
+      const xauUsd=Number(xauUsdData?.rates?.USD);
+      const usdTry=D.rates.USD;
+      if(!xauUsd||!usdTry||!Number.isFinite(xauUsd)||!Number.isFinite(usdTry))throw 0;
+      D.rates.XAU=xauUsd*usdTry;
+      goldOk=true;
+      D.ratesMeta.gold={source:'exchangerate.host (XAU/USD × USD/TRY)',updatedAt:now};
+    }catch{
+      D.ratesMeta.gold={...(D.ratesMeta.gold||{}),status:'fallback'};
+    }
+  }
+
+  if(fxOk||goldOk){
+    D.ratesUpdated=now;
+    save();
+    renderAll();
+    if(fxOk&&goldOk)toast('Kurlar güncellendi ✓','green');
+    else toast('Kısmi kur güncellemesi yapıldı','amber');
+    return;
+  }
+
+  save();
+  toast('Kur alınamadı, manuel değerler kullanılıyor','amber');
 }
 
 // ════════ STATE ════════
