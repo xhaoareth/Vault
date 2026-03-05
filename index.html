@@ -921,28 +921,49 @@ const ACC_COLORS=['#8b5cf6','#10b981','#ef4444','#f59e0b','#3b82f6','#ec4899','#
 const CURRENCIES=[{c:'TRY',s:'₺',n:'Türk Lirası'},{c:'USD',s:'$',n:'Dolar'},{c:'EUR',s:'€',n:'Euro'},{c:'GBP',s:'£',n:'Sterlin'},{c:'XAU',s:'g',n:'Altın (gr)'},{c:'BTC',s:'₿',n:'Bitcoin'}];
 const FREQ_L={monthly:'Aylık',weekly:'Haftalık',yearly:'Yıllık'};
 const ACC_TYPE_L={banka:'Banka',kredi:'Kredi Kartı',nakit:'Nakit',yatirim:'Yatırım',dijital:'Dijital'};
+const RECEIPT_PARSE_ENDPOINT='/api/receipt-parse';
 
 // ════════ DATA ════════
 let D=loadD();
 function loadD(){
   const def={
     entries:[],
-    accounts:[{id:1,name:'Nakit',type:'nakit',balance:0,num:'',color:'#10b981'}],
+    accounts:[{id:createId(),name:'Nakit',type:'nakit',balance:0,num:'',color:'#10b981'}],
     debts:[],budgets:[],goals:[],recurring:[],
     templates:[],
     customCatsG:[],customCatsI:[],
     notifications:[],
     settings:{currency:'TRY',theme:'',autoRate:true,recNotif:false,alertsEnabled:true},
     rates:{USD:38.5,EUR:42.1,GBP:49.0,XAU:3200,BTC:3500000},
-    ratesUpdated:null
+    ratesUpdated:null,
+    consent:{receiptAi:false}
   };
-  try{const s=JSON.parse(localStorage.getItem('fv5')||'{}');return{...def,...s,settings:{...def.settings,...(s.settings||{})},rates:{...def.rates,...(s.rates||{})}}}catch{return def}
+  try{
+    const s=JSON.parse(localStorage.getItem('fv5')||'{}');
+    const merged={...def,...s,settings:{...def.settings,...(s.settings||{})},rates:{...def.rates,...(s.rates||{})},consent:{...def.consent,...(s.consent||{})}};
+    normalizeIds(merged);
+    return merged;
+  }catch{return def}
 }
 function save(){localStorage.setItem('fv5',JSON.stringify(D))}
+
+function createId(){
+  if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();
+  return `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+function normalizeIds(data){
+  const keys=['entries','accounts','debts','budgets','goals','recurring','templates'];
+  keys.forEach(k=>{
+    (data[k]||[]).forEach(item=>{if(item&&item.id!=null)item.id=String(item.id)});
+  });
+}
 
 // ════════ HELPERS ════════
 function getCatsG(){return [...BASE_CATS_G,...(D.customCatsG||[])]}
 function getCatsI(){return [...BASE_CATS_I,...(D.customCatsI||[])]}
+function eH(v){
+  return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 // ════════ CURRENCY ════════
 const CX=()=>CURRENCIES.find(c=>c.c===D.settings.currency)||CURRENCIES[0];
@@ -989,7 +1010,7 @@ function changeMonth(d){vDate.setMonth(vDate.getMonth()+d);renderAll()}
 
 // ════════ NOTIFICATIONS ════════
 function buildNotifications(){
-  if(!D.settings.alertsEnabled)return;
+  if(!D.settings.alertsEnabled){D.notifications=[];return}
   const notifs=[];
   const now=new Date();
   const md=getME();
@@ -1043,10 +1064,16 @@ function clearNotifs(){D.notifications=[];renderNotifications();el('notifPanel')
 function applyRecurring(){
   const now=new Date();
   D.recurring.forEach(r=>{
-    const key=`rec_${r.id}_${now.getFullYear()}_${now.getMonth()}`;
+    const day=Math.min(Math.max(parseInt(r.day)||1,1),28);
+    const monthlyDue=now.getDate()>=day;
+    const weeklyDue=now.getDay()===(day%7);
+    const yearlyDue=(now.getMonth()===0&&now.getDate()===day);
+    const periodKey=r.freq==='weekly'?`${now.getFullYear()}_w${Math.ceil((((now - new Date(now.getFullYear(),0,1))/86400000)+new Date(now.getFullYear(),0,1).getDay()+1)/7)}`:r.freq==='yearly'?`${now.getFullYear()}`:`${now.getFullYear()}_${now.getMonth()}`;
+    const key=`rec_${r.id}_${periodKey}`;
     if(localStorage.getItem(key))return;
-    if(r.freq==='monthly'&&now.getDate()>=r.day){
-      D.entries.unshift({id:Date.now()+Math.random(),desc:r.desc+' (Oto)',amount:r.amount,category:r.category,type:r.type,date:new Date(now.getFullYear(),now.getMonth(),r.day).toISOString(),tag:'tekrarlayan',note:'Otomatik'});
+    const shouldApply=(r.freq==='monthly'&&monthlyDue)||(r.freq==='weekly'&&weeklyDue)||(r.freq==='yearly'&&yearlyDue);
+    if(shouldApply){
+      D.entries.unshift({id:createId(),desc:r.desc+' (Oto)',amount:r.amount,category:r.category,type:r.type,date:new Date().toISOString(),tag:'tekrarlayan',note:'Otomatik'});
       localStorage.setItem(key,'1');
     }
   });save();
@@ -1061,7 +1088,7 @@ function _addE(dI,aI,cI,acI,tI,nI,type,cxI){
   if(!desc){toast('Açıklama girin','red');return}
   if(!amt||amt<=0){toast('Geçerli tutar girin','red');return}
   const amtTRY=txToTRY(amt,txCx);
-  D.entries.unshift({id:Date.now(),desc,amount:amtTRY,txAmount:amt,txCurrency:txCx,category:cat,type,date:new Date().toISOString(),accountId:acc||null,tag,note});
+  D.entries.unshift({id:createId(),desc,amount:amtTRY,txAmount:amt,txCurrency:txCx,category:cat,type,date:new Date().toISOString(),accountId:acc?String(acc):null,tag,note});
   save();renderAll();
   set(dI,'');set(aI,'');set(tI,'');set(nI,'');
   toast(type==='gelir'?'Gelir eklendi ✓':'Gider eklendi ✓',type==='gelir'?'green':'red');
@@ -1072,13 +1099,13 @@ function deleteEntry(id){D.entries=D.entries.filter(e=>e.id!==id);save();renderA
 function saveTemplate(){
   const desc=v('fDesc'),amt=parseFloat(v('fAmt')),cat=v('fCat'),type=inlineT,txCx=v('fTxCx')||'TRY';
   if(!desc||!amt)return toast('Açıklama ve tutar gerekli','red');
-  D.templates.push({id:Date.now(),desc,amount:amt,category:cat,type,txCurrency:txCx});
+  D.templates.push({id:createId(),desc,amount:amt,category:cat,type,txCurrency:txCx});
   save();renderAll();toast('Şablon kaydedildi ⚡','violet');
 }
 function saveTemplateModal(){
   const desc=v('mDesc'),amt=parseFloat(v('mAmt')),cat=v('mCat'),type=modalT,txCx=v('mTxCx')||'TRY';
   if(!desc||!amt)return toast('Açıklama ve tutar gerekli','red');
-  D.templates.push({id:Date.now(),desc,amount:amt,category:cat,type,txCurrency:txCx});
+  D.templates.push({id:createId(),desc,amount:amt,category:cat,type,txCurrency:txCx});
   save();renderAll();toast('Şablon kaydedildi ⚡','violet');
 }
 function applyTemplate(id,prefix){
@@ -1102,9 +1129,9 @@ function renderTemplates(){
     if(!D.templates.length){if(wrap)wrap.style.display='none';return}
     if(wrap)wrap.style.display='block';
     c.innerHTML=D.templates.map(t=>`
-      <div class="tmpl-card" onclick="applyTemplate(${t.id},'${prefix}')">
-        <button class="tmpl-del" onclick="event.stopPropagation();deleteTemplate(${t.id})">×</button>
-        <div class="tmpl-name">${t.desc}</div>
+      <div class="tmpl-card" data-action="apply-template" data-id="${eH(t.id)}" data-prefix="${prefix}">
+        <button class="tmpl-del" data-action="delete-template" data-id="${eH(t.id)}">×</button>
+        <div class="tmpl-name">${eH(t.desc)}</div>
         <div class="tmpl-amt" style="color:${t.type==='gelir'?'var(--green2)':'var(--red2)'}">${t.type==='gelir'?'+':'-'}${t.txCurrency!=='TRY'?t.amount+' '+t.txCurrency:fc(t.amount)}</div>
       </div>`).join('');
   };
@@ -1114,10 +1141,10 @@ function renderTemplates(){
   const sl=el('tmplSettingsList');
   if(sl)sl.innerHTML=D.templates.length?D.templates.map(t=>`
     <div class="leg-row">
-      <div class="leg-l">${t.type==='gelir'?'↑':'↓'} ${t.desc}</div>
+      <div class="leg-l">${t.type==='gelir'?'↑':'↓'} ${eH(t.desc)}</div>
       <div style="display:flex;align-items:center;gap:6px">
         <span class="leg-r ${t.type==='gelir'?'c-green':'c-red'}">${t.amount} ${t.txCurrency}</span>
-        <button class="tx-del" onclick="deleteTemplate(${t.id})">×</button>
+        <button class="tx-del" data-action="delete-template" data-id="${eH(t.id)}">×</button>
       </div>
     </div>`).join(''):`<div class="empty-t" style="padding:8px 0">Şablon yok</div>`;
 }
@@ -1140,7 +1167,7 @@ function renderCustomCats(){
   const makeList=(containerId,type,cats)=>{
     const c=el(containerId);if(!c)return;
     c.innerHTML=(cats||[]).map(cat=>`
-      <span class="cat-pill">${cat}<button class="cat-pill-del" onclick="removeCustomCat('${type}','${cat}')">×</button></span>`).join('');
+      <span class="cat-pill">${eH(cat)}<button class="cat-pill-del" data-action="remove-cat" data-type="${type}" data-cat="${eH(cat)}">×</button></span>`).join('');
   };
   makeList('customCatsGList','G',D.customCatsG);
   makeList('customCatsIList','I',D.customCatsI);
@@ -1150,6 +1177,16 @@ function renderCustomCats(){
 function triggerReceiptUpload(){el('receiptInput').click()}
 async function handleReceiptUpload(event){
   const file=event.target.files[0];if(!file)return;
+  if(!D.consent?.receiptAi){
+    const ok=confirm('Fiş görseli AI servisine gönderilerek analiz edilecek. Devam etmek istiyor musunuz?');
+    if(!ok){event.target.value='';return}
+    D.consent.receiptAi=true;save();
+  }
+  if(!/^image\//.test(file.type)||file.size>5*1024*1024){
+    toast('Yalnızca görsel dosyası (max 5MB)','amber');
+    event.target.value='';
+    return;
+  }
   const preview=el('receiptPreview');
   const area=el('receiptArea');
   const sub=el('receiptSub');
@@ -1157,31 +1194,23 @@ async function handleReceiptUpload(event){
   // Show preview
   const reader=new FileReader();
   reader.onload=async(e)=>{
-    const b64=e.target.result.split(',')[1];
-    const mtype=file.type||'image/jpeg';
     preview.src=e.target.result;preview.style.display='block';
     area.classList.add('loading');
     sub.innerHTML=`<span class="receipt-spinner"></span>AI analiz ediyor…`;
 
     try{
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      const fd=new FormData();
+      fd.append('receipt',file);
+      const ctrl=new AbortController();
+      const t=setTimeout(()=>ctrl.abort(),15000);
+      const resp=await fetch(RECEIPT_PARSE_ENDPOINT,{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:1000,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:mtype,data:b64}},
-            {type:'text',text:`Bu fiş veya fatura fotoğrafından şu bilgileri çıkar ve sadece JSON formatında ver (başka hiçbir şey yazma):
-{"desc":"kısa açıklama","amount":tutar_sayı,"category":"Market veya Yemek veya Fatura veya Sağlık veya Ulaşım veya Eğlence veya Giyim veya Diğer","note":"ek bilgi"}
-Tutar TL cinsinden olsun. Kategoriyi belirtilen listeden seç.`}
-          ]}]
-        })
+        body:fd,
+        signal:ctrl.signal
       });
-      const data=await resp.json();
-      const text=data.content?.map(i=>i.text||'').join('');
-      const clean=text.replace(/```json|```/g,'').trim();
-      const parsed=JSON.parse(clean);
+      clearTimeout(t);
+      if(!resp.ok)throw new Error('parse-failed');
+      const parsed=await resp.json();
       set('mDesc',parsed.desc||'');
       set('mAmt',parsed.amount||'');
       set('mNote',parsed.note||'');
@@ -1193,8 +1222,8 @@ Tutar TL cinsinden olsun. Kategoriyi belirtilen listeden seç.`}
       sub.textContent='✓ Otomatik dolduruldu';
       toast('Fiş başarıyla okundu ✓','green');
     }catch(err){
-      sub.textContent='Okunamadı — lütfen manuel doldurun';
-      toast('Fiş okunamadı','amber');
+      sub.textContent='Okunamadı — sunucu proxy endpoint gerekli';
+      toast('Fiş okunamadı (backend proxy yok olabilir)','amber');
     }
     area.classList.remove('loading');
   };
@@ -1205,7 +1234,7 @@ Tutar TL cinsinden olsun. Kategoriyi belirtilen listeden seç.`}
 function addAccount(){
   const name=v('aN'),type=v('aT'),balance=parseFloat(v('aBal'))||0,num=v('aNum');
   if(!name){toast('Hesap adı girin','red');return}
-  D.accounts.push({id:Date.now(),name,type,balance,num,color:selAccColor});
+  D.accounts.push({id:createId(),name,type,balance,num,color:selAccColor});
   save();closeModal('accModal');renderAll();toast('Hesap eklendi ✓','green');
   set('aN','');set('aBal','');set('aNum','');
 }
@@ -1219,7 +1248,7 @@ function selectAcc(id){selAcc=selAcc===id?null:id;renderAccounts()}
 function addDebt(){
   const name=v('dN'),total=parseFloat(v('dTotal')),paid=parseFloat(v('dPaid'))||0,due=v('dDue'),cat=v('dCat'),note=v('dNote');
   if(!name||!total||total<=0){toast('Bilgileri doldurun','red');return}
-  D.debts.push({id:Date.now(),name,total,paid,due,cat,note,type:debtT});
+  D.debts.push({id:createId(),name,total,paid,due,cat,note,type:debtT});
   save();closeModal('debtModal');renderAll();toast('Borç eklendi ✓','green');
   set('dN','');set('dTotal','');set('dPaid','');set('dDue','');set('dNote','');
 }
@@ -1235,7 +1264,7 @@ function addBudget(){
   const cat=v('bCat'),limit=parseFloat(v('bLim'));
   if(!limit||limit<=0){toast('Geçerli limit girin','red');return}
   const ex=D.budgets.find(b=>b.cat===cat);
-  if(ex)ex.limit=limit;else D.budgets.push({id:Date.now(),cat,limit});
+  if(ex)ex.limit=limit;else D.budgets.push({id:createId(),cat,limit});
   save();closeModal('budgetModal');renderAll();toast('Limit eklendi ✓','green');
 }
 function deleteBudget(id){D.budgets=D.budgets.filter(b=>b.id!==id);save();renderAll()}
@@ -1244,7 +1273,7 @@ function deleteBudget(id){D.budgets=D.budgets.filter(b=>b.id!==id);save();render
 function addGoal(){
   const name=v('gName'),target=parseFloat(v('gTarget')),current=parseFloat(v('gCurrent'))||0,date=v('gDate');
   if(!name||!target||target<=0){toast('Bilgileri doldurun','red');return}
-  D.goals.push({id:Date.now(),name,target,current,date});
+  D.goals.push({id:createId(),name,target,current,date});
   save();closeModal('goalModal');renderAll();toast('Hedef eklendi ✓','green');
   set('gName','');set('gTarget','');set('gCurrent','');set('gDate','');
 }
@@ -1259,7 +1288,7 @@ function contributeGoal(id){
 function addRecurring(){
   const desc=v('rDesc'),amt=parseFloat(v('rAmt')),cat=v('rCat'),freq=v('rFreq'),day=parseInt(v('rDay'))||1;
   if(!desc||!amt||amt<=0){toast('Bilgileri doldurun','red');return}
-  D.recurring.push({id:Date.now(),desc,amount:amt,category:cat,type:recT,freq,day});
+  D.recurring.push({id:createId(),desc,amount:amt,category:cat,type:recT,freq,day});
   save();closeModal('recModal');renderAll();toast('Tekrarlayan eklendi ✓','green');
 }
 function deleteRecurring(id){D.recurring=D.recurring.filter(r=>r.id!==id);save();renderAll()}
@@ -1366,7 +1395,7 @@ function renderTxPage(){
   el('txSub').textContent=f.length+' kayıt · '+MONTHS[vDate.getMonth()]+' '+vDate.getFullYear();
   el('txList').innerHTML=f.length?f.map((e,i)=>txRow(e,i)).join(''):`<div class="empty"><div class="empty-i">∅</div><div class="empty-t">Kayıt bulunamadı</div></div>`;
   const cats=[...new Set(md.map(e=>e.category))];
-  el('catChips').innerHTML=cats.map(c=>`<button class="fc btn-sm" onclick="filterCat('${c}')">${ICONS[c]||'◈'} ${c}</button>`).join('');
+  el('catChips').innerHTML=cats.map(c=>`<button class="fc btn-sm" data-action="filter-cat" data-cat="${eH(c)}">${ICONS[c]||'◈'} ${eH(c)}</button>`).join('');
 }
 function setTxF(f,btn){txF=f;document.querySelectorAll('#page-islemler .fc').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderTxPage()}
 function filterCat(c){el('txSearch').value=c;renderTxPage()}
@@ -1396,7 +1425,7 @@ function renderCalendar(){
     const dayR=dayEntries.filter(e=>e.type==='gider').reduce((s,e)=>s+e.amount,0);
     const txPreview=dayEntries.slice(0,2).map(e=>`<div class="cal-tx-dot"><span style="width:4px;height:4px;border-radius:50%;background:${e.type==='gelir'?'var(--green2)':'var(--red2)'};flex-shrink:0;display:inline-block;margin-right:2px"></span><span class="cal-tx-amt" style="color:${e.type==='gelir'?'var(--green2)':'var(--red2)'}">${e.type==='gelir'?'+':'-'}${fc(e.amount)}</span></div>`).join('');
     const more=dayEntries.length>2?`<div style="font-size:.48rem;color:var(--t4);font-family:'JetBrains Mono',monospace">+${dayEntries.length-2}</div>`:'';
-    html+=`<div class="cal-cell${isToday?' today':''}" onclick="selectCalDay('${dateStr}',${d})">
+    html+=`<div class="cal-cell${isToday?' today':''}" data-action="select-day" data-date="${dateStr}" data-day="${d}">
       <div class="cal-day">${d}</div>
       ${txPreview}${more}
       ${dayEntries.length?`<div class="cal-day-total" style="color:${dayG-dayR>=0?'var(--green2)':'var(--red2)'}">${dayG-dayR>=0?'+':'-'}${fc(Math.abs(dayG-dayR))}</div>`:''}
@@ -1430,7 +1459,7 @@ function renderAnaliz(){
   const totI=Object.values(catI).reduce((s,v)=>s+v,0)||1;
   const catBlock=(obj,tot,colorVar)=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([cat,val])=>{
     const p=(val/tot)*100;
-    return `<div style="margin-bottom:10px"><div class="leg-row" style="margin-bottom:3px"><div class="leg-l">${ICONS[cat]||'◈'} ${cat}</div><div class="leg-r">${fc(val)}</div></div>
+    return `<div style="margin-bottom:10px"><div class="leg-row" style="margin-bottom:3px"><div class="leg-l">${ICONS[cat]||'◈'} ${eH(cat)}</div><div class="leg-r">${fc(val)}</div></div>
       <div class="prog"><div class="pf" style="width:${p}%;background:${colorVar}"></div></div></div>`;
   }).join('')||`<div class="empty-t" style="padding:16px 0">Kayıt yok</div>`;
   el('catGider').innerHTML=catBlock(catR,totR,'var(--red)');
@@ -1454,22 +1483,22 @@ function renderAnaliz(){
     <div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:var(--violet2)"></div>Net</div><div class="leg-r" style="color:${net>=0?'var(--green2)':'var(--red2)'}">${net>=0?'+':'-'}${fc(Math.abs(net))}</div></div>
     <div class="divider"></div>
     <div style="font-size:.72rem;color:var(--t2)">İşlem: <strong>${md.length}</strong></div>
-    <div style="font-size:.72rem;color:var(--t2);margin-top:4px">En büyük gider: <strong>${Object.entries(catR).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'}</strong></div>`;
+    <div style="font-size:.72rem;color:var(--t2);margin-top:4px">En büyük gider: <strong>${eH(Object.entries(catR).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—')}</strong></div>`;
 }
 
 // ════════ ACCOUNTS ════════
 function renderAccounts(){
   el('accGrid').innerHTML=D.accounts.map(a=>{
     const bal=D.entries.filter(e=>e.accountId==a.id).reduce((s,e)=>e.type==='gelir'?s+e.amount:s-e.amount,a.balance);
-    return `<div class="acc-card ${selAcc===a.id?'sel':''}" onclick="selectAcc(${a.id})" style="${selAcc===a.id?`border-color:${a.color};background:${a.color}18`:'background:var(--s1)'}">
+    return `<div class="acc-card ${selAcc===a.id?'sel':''}" data-action="select-account" data-id="${eH(a.id)}" style="${selAcc===a.id?`border-color:${a.color};background:${a.color}18`:'background:var(--s1)'}">
       <div class="acc-stripe" style="background:${a.color}"></div>
       <div class="acc-type">${ACC_TYPE_L[a.type]||a.type}</div>
-      <div class="acc-name">${a.name}</div>
+      <div class="acc-name">${eH(a.name)}</div>
       <div class="acc-bal" style="color:${a.color}">${fc(bal)}</div>
-      ${a.num?`<div class="acc-num">•••• ${a.num}</div>`:''}
+      ${a.num?`<div class="acc-num">•••• ${eH(a.num)}</div>`:''}
       <div class="acc-foot">
         <span style="font-size:.65rem;color:var(--t3)">${D.entries.filter(e=>e.accountId==a.id).length} işlem</span>
-        <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();deleteAccount(${a.id})">Sil</button>
+        <button class="btn btn-ghost btn-xs" data-action="delete-account" data-id="${eH(a.id)}">Sil</button>
       </div>
     </div>`;
   }).join('');
@@ -1497,11 +1526,11 @@ function renderDebts(){
     const overdue=d.due&&new Date(d.due)<new Date()&&rem>0;
     const dueDate=d.due?new Date(d.due).toLocaleDateString('tr-TR'):'—';
     return `<div class="debt-item">
-      <div class="debt-top"><div class="debt-name">${ICONS[d.cat]||'◈'} ${d.name}<span class="debt-type ${overdue?'bg-red c-red':'bg-amber c-amber'}">${d.cat}</span>${rem<=0?`<span class="chip bg-green c-green">✓</span>`:''}</div><button class="tx-del" onclick="deleteDebt(${d.id})">×</button></div>
+      <div class="debt-top"><div class="debt-name">${ICONS[d.cat]||'◈'} ${eH(d.name)}<span class="debt-type ${overdue?'bg-red c-red':'bg-amber c-amber'}">${eH(d.cat)}</span>${rem<=0?`<span class="chip bg-green c-green">✓</span>`:''}</div><button class="tx-del" data-action="delete-debt" data-id="${eH(d.id)}">×</button></div>
       <div class="debt-nums"><span class="debt-total">${fc(rem)} kaldı</span><span class="debt-paid">/ ${fc(d.total)} · ${fc(d.paid)} ödendi</span></div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="debt-due ${overdue?'bg-red c-red':'bg-amber c-amber'}">${dueDate}</span>${d.note?`<span style="font-size:.65rem;color:var(--t3)">${d.note}</span>`:''}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="debt-due ${overdue?'bg-red c-red':'bg-amber c-amber'}">${dueDate}</span>${d.note?`<span style="font-size:.65rem;color:var(--t3)">${eH(d.note)}</span>`:''}</div>
       <div class="prog"><div class="pf" style="width:${pct}%;background:${pct>=100?'var(--green)':overdue?'var(--red)':'var(--amber)'}"></div></div>
-      ${rem>0?`<button class="btn btn-ghost btn-xs" style="margin-top:8px" onclick="payDebt(${d.id})">Ödeme Ekle</button>`:''}
+      ${rem>0?`<button class="btn btn-ghost btn-xs" style="margin-top:8px" data-action="pay-debt" data-id="${eH(d.id)}">Ödeme Ekle</button>`:''}
     </div>`;
   }).join(''):`<div class="empty"><div class="empty-i">∅</div><div class="empty-t">Kayıt yok</div></div>`;
   el('debtList').innerHTML=debtBlock(borcs);
@@ -1514,7 +1543,7 @@ function renderHedefler(){
   el('budgetList').innerHTML=D.budgets.length?D.budgets.map(b=>{
     const s=ge.filter(e=>e.category===b.cat).reduce((x,e)=>x+e.amount,0);
     const p=Math.min((s/b.limit)*100,100);const ov=s>b.limit;
-    return `<div class="goal-item"><div class="goal-top"><div class="goal-name">${ICONS[b.cat]||'◈'} ${b.cat}</div><div style="display:flex;align-items:center;gap:6px"><div class="goal-pct" style="color:${ov?'var(--red2)':p>80?'var(--amber2)':'var(--green2)'}">${Math.round(p)}%</div><button class="tx-del" onclick="deleteBudget(${b.id})">×</button></div></div>
+    return `<div class="goal-item"><div class="goal-top"><div class="goal-name">${ICONS[b.cat]||'◈'} ${eH(b.cat)}</div><div style="display:flex;align-items:center;gap:6px"><div class="goal-pct" style="color:${ov?'var(--red2)':p>80?'var(--amber2)':'var(--green2)'}">${Math.round(p)}%</div><button class="tx-del" data-action="delete-budget" data-id="${eH(b.id)}">×</button></div></div>
       <div class="goal-sub">${fc(s)} harcandı / ${fc(b.limit)} limit ${ov?'<span class="chip bg-red c-red">AŞILDI</span>':''}</div>
       <div class="prog"><div class="pf" style="width:${p}%;background:${ov?'var(--red)':p>80?'var(--amber)':'var(--green)'}"></div></div></div>`;
   }).join(''):`<div class="empty"><div class="empty-i">◇</div><div class="empty-t">Limit yok</div></div>`;
@@ -1522,25 +1551,25 @@ function renderHedefler(){
     const p=Math.min((g.current/g.target)*100,100);const done=p>=100;
     const rem=g.target-g.current;
     const dDate=g.date?new Date(g.date).toLocaleDateString('tr-TR'):'—';
-    return `<div class="goal-item"><div class="goal-top"><div class="goal-name">${g.name} ${done?'🎉':''}</div><div style="display:flex;align-items:center;gap:6px"><div class="goal-pct" style="color:${done?'var(--green2)':'var(--violet2)'}">${Math.round(p)}%</div><button class="tx-del" onclick="deleteGoal(${g.id})">×</button></div></div>
+    return `<div class="goal-item"><div class="goal-top"><div class="goal-name">${eH(g.name)} ${done?'🎉':''}</div><div style="display:flex;align-items:center;gap:6px"><div class="goal-pct" style="color:${done?'var(--green2)':'var(--violet2)'}">${Math.round(p)}%</div><button class="tx-del" data-action="delete-goal" data-id="${eH(g.id)}">×</button></div></div>
       <div class="goal-sub">${fc(g.current)} / ${fc(g.target)} · Son: ${dDate}</div>
       <div class="prog"><div class="pf" style="width:${p}%;background:${done?'var(--green)':'var(--violet)'}"></div></div>
-      ${!done?`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><span style="font-size:.65rem;color:var(--t3)">${fc(rem)} kaldı</span><button class="btn btn-ghost btn-xs" onclick="contributeGoal(${g.id})">+ Ekle</button></div>`:''}
+      ${!done?`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><span style="font-size:.65rem;color:var(--t3)">${fc(rem)} kaldı</span><button class="btn btn-ghost btn-xs" data-action="contribute-goal" data-id="${eH(g.id)}">+ Ekle</button></div>`:''}
     </div>`;
   }).join(''):`<div class="empty"><div class="empty-i">◇</div><div class="empty-t">Hedef yok</div></div>`;
   const ok=D.budgets.filter(b=>{const s=ge.filter(e=>e.category===b.cat).reduce((x,e)=>x+e.amount,0);return s<=b.limit}).length;
-  el('budgetPerf').innerHTML=D.budgets.length?`<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap"><div><div style="font-family:'Instrument Serif',serif;font-size:2.2rem">${ok}<span style="font-size:1rem;color:var(--t3)">/${D.budgets.length}</span></div><div style="font-size:.72rem;color:var(--t3)">limit uyumlu</div></div><div class="prog" style="flex:1;min-width:100px"><div class="pf" style="width:${D.budgets.length?(ok/D.budgets.length)*100:0}%;background:var(--green)"></div></div></div><div class="divider"></div>${D.budgets.map(b=>{const s=ge.filter(e=>e.category===b.cat).reduce((x,e)=>x+e.amount,0);const ok2=s<=b.limit;return`<div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:${ok2?'var(--green2)':'var(--red2)'}"></div>${b.cat}</div><div style="font-family:'JetBrains Mono',monospace;font-size:.62rem;color:${ok2?'var(--green2)':'var(--red2)'}">${ok2?'✓ OK':'✗ AŞILDI'}</div></div>`}).join('')}`:`<div class="empty-t" style="padding:16px 0">Limit eklenmemiş</div>`;
+  el('budgetPerf').innerHTML=D.budgets.length?`<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap"><div><div style="font-family:'Instrument Serif',serif;font-size:2.2rem">${ok}<span style="font-size:1rem;color:var(--t3)">/${D.budgets.length}</span></div><div style="font-size:.72rem;color:var(--t3)">limit uyumlu</div></div><div class="prog" style="flex:1;min-width:100px"><div class="pf" style="width:${D.budgets.length?(ok/D.budgets.length)*100:0}%;background:var(--green)"></div></div></div><div class="divider"></div>${D.budgets.map(b=>{const s=ge.filter(e=>e.category===b.cat).reduce((x,e)=>x+e.amount,0);const ok2=s<=b.limit;return`<div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:${ok2?'var(--green2)':'var(--red2)'}"></div>${eH(b.cat)}</div><div style="font-family:'JetBrains Mono',monospace;font-size:.62rem;color:${ok2?'var(--green2)':'var(--red2)'}">${ok2?'✓ OK':'✗ AŞILDI'}</div></div>`}).join('')}`:`<div class="empty-t" style="padding:16px 0">Limit eklenmemiş</div>`;
 }
 
 // ════════ TEKRARLAYAN ════════
 function renderTekrarlayan(){
   el('recList').innerHTML=D.recurring.length?D.recurring.map(r=>`
-    <div class="debt-item"><div class="debt-top"><div class="debt-name"><div style="width:6px;height:6px;border-radius:1px;background:${r.type==='gelir'?'var(--green2)':'var(--red2)'};flex-shrink:0"></div>${r.desc}</div><button class="tx-del" onclick="deleteRecurring(${r.id})">×</button></div>
+    <div class="debt-item"><div class="debt-top"><div class="debt-name"><div style="width:6px;height:6px;border-radius:1px;background:${r.type==='gelir'?'var(--green2)':'var(--red2)'};flex-shrink:0"></div>${eH(r.desc)}</div><button class="tx-del" data-action="delete-recurring" data-id="${eH(r.id)}">×</button></div>
       <div class="debt-nums"><span class="${r.type==='gelir'?'c-green':'c-red'}">${r.type==='gelir'?'+':'-'}${fc(r.amount)}</span></div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:.57rem;color:var(--t3)">${FREQ_L[r.freq]} · Gün ${r.day} · ${r.category}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.57rem;color:var(--t3)">${FREQ_L[r.freq]} · Gün ${r.day} · ${eH(r.category)}</div>
     </div>`).join(''):`<div class="empty"><div class="empty-i">↻</div><div class="empty-t">Tekrarlayan yok</div></div>`;
   const exp=D.recurring.filter(r=>r.freq==='monthly');
-  el('recExpected').innerHTML=exp.length?exp.map(r=>`<div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:${r.type==='gelir'?'var(--green2)':'var(--red2)'}"></div>${r.desc} (${r.day}. gün)</div><div class="leg-r ${r.type==='gelir'?'c-green':'c-red'}">${r.type==='gelir'?'+':'-'}${fc(r.amount)}</div></div>`).join(''):`<div class="empty-t" style="padding:12px 0">Aylık tekrarlayan yok</div>`;
+  el('recExpected').innerHTML=exp.length?exp.map(r=>`<div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:${r.type==='gelir'?'var(--green2)':'var(--red2)'}"></div>${eH(r.desc)} (${r.day}. gün)</div><div class="leg-r ${r.type==='gelir'?'c-green':'c-red'}">${r.type==='gelir'?'+':'-'}${fc(r.amount)}</div></div>`).join(''):`<div class="empty-t" style="padding:12px 0">Aylık tekrarlayan yok</div>`;
 }
 
 // ════════ SETTINGS ════════
@@ -1673,15 +1702,15 @@ function txRow(e,i){
   const acc=D.accounts.find(a=>a.id==e.accountId);
   const d=new Date(e.date);
   const fd=d.getDate()+' '+MONTHS[d.getMonth()].slice(0,3);
-  const cxTag=e.txCurrency&&e.txCurrency!=='TRY'?`<span class="tx-cx">${e.txAmount} ${e.txCurrency}</span>`:'';
+  const cxTag=e.txCurrency&&e.txCurrency!=='TRY'?`<span class="tx-cx">${eH(e.txAmount)} ${eH(e.txCurrency)}</span>`:'';
   return `<div class="tx-item" style="animation-delay:${i*.03}s">
     <div class="tx-ico ${isG?'bg-green':'bg-red'}">${ICONS[e.category]||'◈'}</div>
     <div class="tx-body">
-      <div class="tx-d">${e.desc}</div>
-      <div class="tx-m">${e.category} · ${fd}${acc?` · ${acc.name}`:''}${cxTag}${e.tag?`<span class="tx-tag">${e.tag}</span>`:''}${e.note?`<span class="tx-note">${(e.note+'').slice(0,28)}${(e.note+'').length>28?'…':''}</span>`:''}</div>
+      <div class="tx-d">${eH(e.desc)}</div>
+      <div class="tx-m">${eH(e.category)} · ${fd}${acc?` · ${eH(acc.name)}`:''}${cxTag}${e.tag?`<span class="tx-tag">${eH(e.tag)}</span>`:''}${e.note?`<span class="tx-note">${eH((e.note+'').slice(0,28))}${(e.note+'').length>28?'…':''}</span>`:''}</div>
     </div>
     <div class="tx-amt ${isG?'c-green':'c-red'}">${isG?'+':'-'}${fc(e.amount)}</div>
-    <button class="tx-del" onclick="deleteEntry(${e.id})">×</button>
+    <button class="tx-del" data-action="delete-entry" data-id="${eH(e.id)}">×</button>
   </div>`;
 }
 function el(id){return document.getElementById(id)}
@@ -1769,6 +1798,25 @@ function toggleExp(){el('expDd').classList.toggle('off')}
 document.addEventListener('click',e=>{
   if(!e.target.closest('[onclick="toggleExp()"]')&&!e.target.closest('#expDd'))el('expDd').classList.add('off');
   if(!e.target.closest('.notif-wrap'))el('notifPanel').classList.add('off');
+
+  const actEl=e.target.closest('[data-action]');
+  if(!actEl)return;
+  const action=actEl.dataset.action;
+  const id=actEl.dataset.id;
+  if(action==='delete-entry')deleteEntry(id);
+  if(action==='delete-template')deleteTemplate(id);
+  if(action==='apply-template')applyTemplate(actEl.dataset.id,actEl.dataset.prefix);
+  if(action==='remove-cat')removeCustomCat(actEl.dataset.type,actEl.dataset.cat);
+  if(action==='filter-cat')filterCat(actEl.dataset.cat);
+  if(action==='select-day')selectCalDay(actEl.dataset.date,parseInt(actEl.dataset.day));
+  if(action==='select-account')selectAcc(id);
+  if(action==='delete-account'){e.stopPropagation();deleteAccount(id)}
+  if(action==='delete-debt')deleteDebt(id);
+  if(action==='pay-debt')payDebt(id);
+  if(action==='delete-budget')deleteBudget(id);
+  if(action==='delete-goal')deleteGoal(id);
+  if(action==='contribute-goal')contributeGoal(id);
+  if(action==='delete-recurring')deleteRecurring(id);
 });
 function exportCSV(){
   const rows=[['Tarih','Açıklama','Kategori','Tür','Tutar(TRY)','Orijinal Tutar','Orijinal Para Birimi','Hesap','Etiket','Not']];
@@ -1778,7 +1826,7 @@ function exportCSV(){
 }
 function exportJSON(){dl(JSON.stringify(D,null,2),'finvault.json','application/json');toast('JSON indirildi ✓','green');el('expDd').classList.add('off')}
 function dl(c,n,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:t}));a.download=n;a.click()}
-function clearData(){if(!confirm('Tüm veriler silinecek!'))return;D.entries=[];D.debts=[];D.budgets=[];D.goals=[];D.recurring=[];D.templates=[];D.customCatsG=[];D.customCatsI=[];D.accounts=[{id:1,name:'Nakit',type:'nakit',balance:0,num:'',color:'#10b981'}];save();renderAll();toast('Veriler silindi','amber')}
+function clearData(){if(!confirm('Tüm veriler silinecek!'))return;D.entries=[];D.debts=[];D.budgets=[];D.goals=[];D.recurring=[];D.templates=[];D.customCatsG=[];D.customCatsI=[];D.accounts=[{id:createId(),name:'Nakit',type:'nakit',balance:0,num:'',color:'#10b981'}];save();renderAll();toast('Veriler silindi','amber')}
 
 // ════════ TOAST ════════
 const TC={green:'var(--green)',red:'var(--red2)',amber:'var(--amber2)',violet:'var(--violet2)'};
