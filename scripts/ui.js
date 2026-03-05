@@ -331,12 +331,16 @@ function renderTekrarlayan(){
 
 // ════════ SETTINGS ════════
 function renderSettings(){
+  const goldMeta=D.ratesMeta?.gold;
+  const goldSource=goldMeta?.source||'Fallback (manuel)';
+  const goldUpdated=goldMeta?.updatedAt?new Date(goldMeta.updatedAt).toLocaleString('tr-TR'):'—';
   el('cxSelect').innerHTML=CURRENCIES.map(c=>`<div onclick="setCx('${c.c}')" style="padding:6px 12px;border-radius:7px;border:1px solid ${D.settings.currency===c.c?'var(--violet)':'var(--b2)'};background:${D.settings.currency===c.c?'var(--violet-d)':'var(--s2)'};color:${D.settings.currency===c.c?'var(--violet2)':'var(--t2)'};cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.06em">${c.s} ${c.c}</div>`).join('');
   el('ratesList').innerHTML=`
     <div class="leg-row"><div class="leg-l">USD/TRY</div><div class="leg-r">₺${D.rates.USD?.toFixed(2)||'—'}</div></div>
     <div class="leg-row"><div class="leg-l">EUR/TRY</div><div class="leg-r">₺${D.rates.EUR?.toFixed(2)||'—'}</div></div>
     <div class="leg-row"><div class="leg-l">GBP/TRY</div><div class="leg-r">₺${D.rates.GBP?.toFixed(2)||'—'}</div></div>
     <div class="leg-row"><div class="leg-l">Altın/gr</div><div class="leg-r">₺${D.rates.XAU?.toFixed(0)||'—'}</div></div>
+    <div class="leg-row"><div class="leg-l">Altın kaynağı / son güncelleme</div><div class="leg-r" style="text-align:right;max-width:58%">${eH(goldSource)}<br><span style="color:var(--t3)">${goldUpdated}</span></div></div>
     <div class="leg-row"><div class="leg-l">BTC/TRY</div><div class="leg-r">₺${D.rates.BTC?.toLocaleString('tr-TR')||'—'}</div></div>
     ${D.ratesUpdated?`<div style="font-size:.6rem;color:var(--t3);margin-top:8px;font-family:'JetBrains Mono',monospace">Son: ${new Date(D.ratesUpdated).toLocaleString('tr-TR')}</div>`:''}`;
   el('tog-autoRate').className='tog'+(D.settings.autoRate?' on':'');
