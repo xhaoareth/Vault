@@ -2,10 +2,10 @@
 function addEntry(){_addE('fDesc','fAmt','fCat','fAcc','fTag','fNote',inlineT,'fTxCx')}
 function addEntryModal(){_addE('mDesc','mAmt','mCat','mAcc','mTag','mNote',modalT,'mTxCx');closeModal('addModal')}
 function _addE(dI,aI,cI,acI,tI,nI,type,cxI){
-  const desc=v(dI),amt=parseFloat(v(aI)),cat=v(cI),acc=v(acI),tag=v(tI),note=v(nI);
+  const desc=cleanText(v(dI)),amt=parsePositiveAmount(v(aI)),cat=v(cI),acc=v(acI),tag=cleanText(v(tI)),note=cleanText(v(nI));
   const txCx=v(cxI)||'TRY';
   if(!desc){toast('Açıklama girin','red');return}
-  if(!amt||amt<=0){toast('Geçerli tutar girin','red');return}
+  if(amt==null){toast('Geçerli tutar girin','red');return}
   const amtTRY=txToTRY(amt,txCx);
   D.entries.unshift({id:createId(),desc,amount:amtTRY,txAmount:amt,txCurrency:txCx,category:cat,type,date:new Date().toISOString(),accountId:acc?String(acc):null,tag,note});
   save();renderAll();
@@ -151,7 +151,7 @@ async function handleReceiptUpload(event){
 
 // ════════ ACCOUNT ════════
 function addAccount(){
-  const name=v('aN'),type=v('aT'),balance=parseFloat(v('aBal'))||0,num=v('aNum');
+  const name=cleanText(v('aN')),type=v('aT'),balance=parseFloat(v('aBal'))||0,num=cleanText(v('aNum'));
   if(!name){toast('Hesap adı girin','red');return}
   D.accounts.push({id:createId(),name,type,balance,num,color:selAccColor});
   save();closeModal('accModal');renderAll();toast('Hesap eklendi ✓','green');
@@ -159,14 +159,16 @@ function addAccount(){
 }
 function deleteAccount(id){
   if(D.accounts.length<=1){toast('En az 1 hesap olmalı','red');return}
+  const fallbackAcc=D.accounts.find(a=>a.id!==id);
+  D.entries.forEach(e=>{if(e.accountId===id)e.accountId=fallbackAcc?fallbackAcc.id:null});
   D.accounts=D.accounts.filter(a=>a.id!==id);save();renderAll();toast('Silindi','amber');
 }
 function selectAcc(id){selAcc=selAcc===id?null:id;renderAccounts()}
 
 // ════════ BUDGET ════════
 function addBudget(){
-  const cat=v('bCat'),limit=parseFloat(v('bLim'));
-  if(!limit||limit<=0){toast('Geçerli limit girin','red');return}
+  const cat=v('bCat'),limit=parsePositiveAmount(v('bLim'));
+  if(limit==null){toast('Geçerli limit girin','red');return}
   const ex=D.budgets.find(b=>b.cat===cat);
   if(ex)ex.limit=limit;else D.budgets.push({id:createId(),cat,limit});
   save();closeModal('budgetModal');renderAll();toast('Limit eklendi ✓','green');
