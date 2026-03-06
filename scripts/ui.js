@@ -545,6 +545,40 @@ function openModal(id){
 function closeModal(id){document.getElementById(id).classList.add('off')}
 document.querySelectorAll('.overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.add('off')}));
 
+function openAmountModal({kind,id,title,label}){
+  const modal=el('amountModal');
+  if(!modal)return;
+  set('amountKind',kind);
+  set('amountTargetId',id);
+  el('amountTitle').textContent=title;
+  el('amountLabel').textContent=label;
+  set('amountValue','');
+  modal.classList.remove('off');
+  setTimeout(()=>el('amountValue')?.focus(),20);
+}
+function submitAmountModal(){
+  const kind=v('amountKind');
+  const id=v('amountTargetId');
+  const amt=parsePositiveAmount(v('amountValue'));
+  if(amt==null){toast('Geçerli tutar girin','red');return}
+
+  if(kind==='debt'){
+    const d=D.debts.find(x=>x.id===id);
+    if(!d){toast('Kayıt bulunamadı','red');return}
+    d.paid=Math.min(d.total,d.paid+amt);
+    toast('Ödeme kaydedildi ✓','green');
+  }
+  if(kind==='goal'){
+    const g=D.goals.find(x=>x.id===id);
+    if(!g){toast('Kayıt bulunamadı','red');return}
+    g.current=Math.min(g.target,g.current+amt);
+    toast('Birikim güncellendi ✓','green');
+  }
+  closeModal('amountModal');
+  save();
+  renderAll();
+}
+
 // ════════ EXPORT ════════
 function toggleExp(){el('expDd').classList.toggle('off')}
 document.addEventListener('click',e=>{
@@ -569,6 +603,7 @@ document.addEventListener('click',e=>{
   if(action==='delete-goal')deleteGoal(id);
   if(action==='contribute-goal')contributeGoal(id);
   if(action==='delete-recurring')deleteRecurring(id);
+  if(action==='submit-amount')submitAmountModal();
 });
 function exportCSV(){
   const rows=[['Tarih','Açıklama','Kategori','Tür','Tutar(TRY)','Orijinal Tutar','Orijinal Para Birimi','Hesap','Etiket','Not']];
@@ -598,6 +633,7 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='k'){openModal('addModal');e.preventDefault()}
   if(e.key==='Enter'&&['fDesc','fAmt'].includes(e.target.id))addEntry();
   if(e.key==='Enter'&&['mDesc','mAmt'].includes(e.target.id))addEntryModal();
+  if(e.key==='Enter'&&e.target.id==='amountValue')submitAmountModal();
 });
 
 // ════════ INIT ════════
