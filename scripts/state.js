@@ -52,6 +52,19 @@ function getCatsI(){return [...BASE_CATS_I,...(D.customCatsI||[])]}
 function eH(v){
   return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function cleanText(v){return String(v??'').trim()}
+function parsePositiveAmount(raw,{allowZero=false}={}){
+  const n=typeof raw==='number'?raw:parseFloat(raw);
+  if(!Number.isFinite(n))return null;
+  if(allowZero&&n===0)return 0;
+  return n>0?n:null;
+}
+function isValidInputDate(dateStr){
+  if(!dateStr)return true;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dateStr))return false;
+  const d=new Date(`${dateStr}T00:00:00`);
+  return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===dateStr;
+}
 
 // ════════ CURRENCY ════════
 const CX=()=>CURRENCIES.find(c=>c.c===D.settings.currency)||CURRENCIES[0];
