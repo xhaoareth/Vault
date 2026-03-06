@@ -1,107 +1,540 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FinVault Mobile</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles/main.css" />
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="top-bar">
-        <div>
-          <p class="eyebrow">Kişisel Finans</p>
-          <h1 id="screenTitle">Nakit Akışı</h1>
-        </div>
-        <button class="pill primary" id="quickAddBtn">İşlem ekle</button>
-      </header>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinVault</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+<div class="app">
 
-      <main id="viewRoot" class="view-root"></main>
+<!-- ══ ICON NAV ══ -->
+<nav class="icon-nav">
+  <div class="nav-logo" onclick="nav('ozet',this)">F</div>
+  <div class="ni active" id="ni-ozet" onclick="nav('ozet',this)" title="Özet"><div class="ni-icon">◈</div><div class="ni-label">Özet</div></div>
+  <div class="ni" id="ni-islemler" onclick="nav('islemler',this)" title="İşlemler"><div class="ni-icon">↕</div><div class="ni-label">İşlem</div></div>
+  <div class="ni" id="ni-analiz" onclick="nav('analiz',this)" title="Analiz"><div class="ni-icon">△</div><div class="ni-label">Analiz</div></div>
+  <div class="ni" id="ni-takvim" onclick="nav('takvim',this)" title="Takvim"><div class="ni-icon">▦</div><div class="ni-label">Takvim</div></div>
+  <div class="ni-sep"></div>
+  <div class="ni" id="ni-hesaplar" onclick="nav('hesaplar',this)" title="Hesaplar"><div class="ni-icon">◎</div><div class="ni-label">Hesap</div></div>
+  <div class="ni" id="ni-borclar" onclick="nav('borclar',this)" title="Borçlar"><div class="ni-icon">⚠</div><div class="ni-label">Borç</div><div class="ni-badge" id="debtBadge" style="display:none"></div></div>
+  <div class="ni" id="ni-hedefler" onclick="nav('hedefler',this)" title="Hedefler"><div class="ni-icon">◇</div><div class="ni-label">Hedef</div></div>
+  <div class="ni" id="ni-tekrarlayan" onclick="nav('tekrarlayan',this)" title="Tekrarlayan"><div class="ni-icon">↻</div><div class="ni-label">Tekrar</div></div>
+  <div class="ni-sep"></div>
+  <div class="ni" id="ni-ayarlar" onclick="nav('ayarlar',this)" title="Ayarlar" style="margin-top:auto"><div class="ni-icon">⚙</div><div class="ni-label">Ayar</div></div>
+</nav>
 
-      <nav class="bottom-nav" aria-label="Alt menü">
-        <button data-tab="cashflow" class="nav-item active">Akış</button>
-        <button data-tab="analytics" class="nav-item">Analitik</button>
-        <button data-tab="payments" class="nav-item">Yaklaşan</button>
-        <button data-tab="extras" class="nav-item">Ekstra</button>
-        <button data-tab="settings" class="nav-item">Ayarlar</button>
-      </nav>
+<!-- ══ CONTENT ══ -->
+<div class="content">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="tb-breadcrumb">
+      <span>FinVault</span>
+      <span class="tb-sep">›</span>
+      <strong id="tbPage">Özet</strong>
     </div>
+    <div class="month-nav" id="topMonthNav">
+      <button class="mn-btn" onclick="changeMonth(-1)">‹</button>
+      <div class="mn-lbl" id="mnLabel"></div>
+      <button class="mn-btn" onclick="changeMonth(1)">›</button>
+    </div>
+    <div class="tb-right">
+      <div class="live-dot" title="Canlı kur"></div>
+      <input class="tb-search" id="globalSearch" placeholder="Ara…" oninput="globalSearchFn()">
+      <!-- NOTIFICATION BELL -->
+      <div class="notif-wrap">
+        <button class="notif-btn" id="notifBtn" onclick="toggleNotif()" title="Bildirimler">
+          🔔
+          <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+        </button>
+        <div class="notif-panel off" id="notifPanel">
+          <div class="notif-hd">
+            <span class="notif-hd-t">Bildirimler</span>
+            <button class="notif-clear" onclick="clearNotifs()">Temizle</button>
+          </div>
+          <div class="notif-list" id="notifList"></div>
+        </div>
+      </div>
+      <div style="position:relative">
+        <button class="tb-btn" onclick="toggleExp()">⬇ Export</button>
+        <div class="exp-dd off" id="expDd">
+          <div class="exp-i" onclick="exportCSV()">📊 CSV</div>
+          <div class="exp-i" onclick="exportJSON()">{ } JSON</div>
+          <div class="exp-i" onclick="exportPDF()">📄 PDF Rapor</div>
+          <div class="exp-i" onclick="window.print()">🖨 Yazdır</div>
+        </div>
+      </div>
+      <button class="tb-btn accent" onclick="openModal('addModal')">＋ <span>Ekle</span></button>
+    </div>
+  </div>
 
-    <dialog id="transactionModal" class="sheet">
-      <form id="transactionForm" class="sheet-content" method="dialog">
-        <div class="sheet-header">
-          <h2 id="transactionModalTitle">İşlem Ekle</h2>
-          <button class="icon-btn" type="button" id="closeTxModal">✕</button>
-        </div>
-        <div class="grid-2">
-          <label>Tür
-            <select name="type" required>
-              <option value="income">Gelir</option>
-              <option value="expense">Gider</option>
-            </select>
-          </label>
-          <label>Tutar
-            <input name="amount" type="number" min="0" step="0.01" required />
-          </label>
-        </div>
-        <label>Başlık
-          <input name="title" required />
-        </label>
-        <div class="grid-2">
-          <label>Kategori
-            <input name="category" list="categoryList" required />
-          </label>
-          <label>Tarih
-            <input name="date" type="date" required />
-          </label>
-        </div>
-        <div class="grid-2">
-          <label>Cüzdan
-            <input name="wallet" list="walletList" required />
-          </label>
-          <label>Etiketler (virgül)
-            <input name="tags" placeholder="market, aile" />
-          </label>
-        </div>
-        <label>Not
-          <textarea name="notes" rows="2"></textarea>
-        </label>
-        <label class="toggle-row">
-          <input type="checkbox" name="recurring" />
-          <span>Tekrarlayan işlem</span>
-        </label>
-        <div class="sheet-actions">
-          <button class="pill" type="button" id="deleteTransactionBtn">Sil</button>
-          <button class="pill primary" type="submit">Kaydet</button>
-        </div>
-      </form>
-    </dialog>
+  <div style="display:flex;flex:1;min-width:0">
+  <div style="flex:1;min-width:0;overflow-y:auto">
 
-    <dialog id="entityModal" class="sheet">
-      <form id="entityForm" class="sheet-content" method="dialog">
-        <div class="sheet-header">
-          <h2 id="entityModalTitle">Yeni Kayıt</h2>
-          <button class="icon-btn" type="button" id="closeEntityModal">✕</button>
+  <!-- ══ ÖZET ══ -->
+  <div class="page active" id="page-ozet">
+    <div class="ph">
+      <div class="ph-left">
+        <div class="ph-title">Genel <em>Özet</em></div>
+        <div class="ph-sub" id="ozetSub"></div>
+      </div>
+      <div class="ph-actions">
+        <button class="pdf-btn" onclick="exportPDF()">📄 PDF Rapor</button>
+      </div>
+    </div>
+    <div class="g4 mb20" id="kpiRow"></div>
+    <div class="g21 mb12">
+      <div class="card">
+        <div class="card-hd">Aylık Trend — Son 6 Ay</div>
+        <svg class="line-svg" id="lineChart" viewBox="0 0 580 160" height="160"></svg>
+        <div style="display:flex;gap:14px;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--t3)"><div style="width:10px;height:2px;background:var(--green2);border-radius:1px"></div>Gelir</div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--t3)"><div style="width:10px;height:2px;background:var(--red2);border-radius:1px"></div>Gider</div>
+          <div style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--t3)"><div style="width:10px;height:2px;background:var(--violet2);border-radius:1px"></div>Net</div>
         </div>
-        <label>Ad
-          <input name="name" required />
-        </label>
-        <label id="entitySecondaryWrap">Hedef / Ek Bilgi
-          <input name="secondary" />
-        </label>
-        <div class="sheet-actions">
-          <button class="pill primary" type="submit">Kaydet</button>
+      </div>
+      <div class="card">
+        <div class="card-hd">Dağılım</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
+          <div class="donut-box">
+            <svg width="110" height="110" viewBox="0 0 110 110">
+              <circle cx="55" cy="55" r="42" fill="none" stroke="var(--s3)" stroke-width="14"/>
+              <circle id="dG" cx="55" cy="55" r="42" fill="none" stroke="var(--green2)" stroke-width="14" stroke-dasharray="0 264" transform="rotate(-90 55 55)" style="transition:stroke-dasharray .8s ease"/>
+              <circle id="dR" cx="55" cy="55" r="42" fill="none" stroke="var(--red2)" stroke-width="14" stroke-dasharray="0 264" transform="rotate(-90 55 55)" style="transition:stroke-dasharray .8s ease"/>
+            </svg>
+            <div class="donut-ctr"><div class="donut-v" id="donutV">—</div><div class="donut-s">oran</div></div>
+          </div>
+          <div style="width:100%">
+            <div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:var(--green2)"></div>Gelir</div><div class="leg-r c-green" id="lgG">—</div></div>
+            <div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:var(--red2)"></div>Gider</div><div class="leg-r c-red" id="lgR">—</div></div>
+            <div class="divider"></div>
+            <div class="leg-row"><div class="leg-l"><div class="leg-dot" style="background:var(--violet2)"></div>Net</div><div class="leg-r" id="lgN">—</div></div>
+          </div>
         </div>
-      </form>
-    </dialog>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd">Son İşlemler <button class="card-hd-action" onclick="nav('islemler',document.getElementById('ni-islemler'))">Tümü →</button></div>
+        <div class="tx-list" id="ozetTx" style="max-height:280px;overflow-y:auto"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Bütçe Durumu <button class="card-hd-action" onclick="nav('hedefler',document.getElementById('ni-hedefler'))">Yönet →</button></div>
+        <div id="ozetBudget"></div>
+        <div class="divider"></div>
+        <div class="card-hd" style="margin-bottom:6px">Gider / Gelir Oranı</div>
+        <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--t2);margin-bottom:3px">
+          <span id="progLbl">%0</span><span id="progPct" style="font-family:'JetBrains Mono',monospace;font-size:.65rem">%0</span>
+        </div>
+        <div class="prog"><div class="pf" id="progF" style="width:0%;background:linear-gradient(90deg,var(--green),var(--amber),var(--red))"></div></div>
+      </div>
+    </div>
+  </div>
 
-    <datalist id="categoryList"></datalist>
-    <datalist id="walletList"></datalist>
+  <!-- ══ İŞLEMLER ══ -->
+  <div class="page" id="page-islemler">
+    <div class="ph">
+      <div class="ph-left">
+        <div class="ph-title">İşlem <em>Geçmişi</em></div>
+        <div class="ph-sub" id="txSub"></div>
+      </div>
+    </div>
+    <div class="g21">
+      <div class="card">
+        <div class="frow">
+          <input class="search-box" id="txSearch" placeholder="🔍 Ara…" oninput="renderTxPage()">
+          <button class="fc on" onclick="setTxF('all',this)">Tümü</button>
+          <button class="fc" onclick="setTxF('gelir',this)">Gelir</button>
+          <button class="fc" onclick="setTxF('gider',this)">Gider</button>
+        </div>
+        <div class="frow" id="catChips"></div>
+        <div class="tx-list" id="txList" style="max-height:520px;overflow-y:auto"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Yeni Kayıt</div>
+        <!-- QUICK TEMPLATES -->
+        <div id="inlineTmplWrap">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.52rem;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:6px">⚡ Şablonlar</div>
+          <div class="tmpl-grid" id="inlineTmplGrid"></div>
+        </div>
+        <div class="seg">
+          <button class="seg-b ag" id="fG" onclick="setFT('gelir')">↑ Gelir</button>
+          <button class="seg-b" id="fR" onclick="setFT('gider')">↓ Gider</button>
+        </div>
+        <div class="field"><label>Açıklama</label><input id="fDesc" placeholder="Maaş, Kira, Market…"></div>
+        <div class="g2">
+          <div class="field">
+            <label>Tutar</label>
+            <div class="amt-cx-row">
+              <input type="number" id="fAmt" placeholder="0.00" min="0" step="0.01">
+              <select class="cx-sel" id="fTxCx"></select>
+            </div>
+          </div>
+          <div class="field"><label>Kategori</label><select id="fCat"></select></div>
+        </div>
+        <div class="g2">
+          <div class="field"><label>Hesap</label><select id="fAcc"></select></div>
+          <div class="field"><label>Etiket</label><input id="fTag" placeholder="opsiyonel"></div>
+        </div>
+        <div class="field"><label>Not</label><textarea id="fNote" placeholder="not…"></textarea></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-g" id="fBtn" onclick="addEntry()" style="flex:1">Kayıt Ekle</button>
+          <button class="btn btn-ghost btn-sm" onclick="saveTemplate()" title="Şablon olarak kaydet">⚡</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <script src="scripts/state.js"></script>
-    <script src="scripts/ui.js"></script>
-  </body>
+  <!-- ══ ANALİZ ══ -->
+  <div class="page" id="page-analiz">
+    <div class="ph"><div class="ph-left"><div class="ph-title">Finansal <em>Analiz</em></div><div class="ph-sub">Kategori ve trend analizi</div></div></div>
+    <div class="g2 mb12">
+      <div class="card"><div class="card-hd">Kategori Bazlı Giderler</div><div id="catGider"></div></div>
+      <div class="card"><div class="card-hd">Kategori Bazlı Gelirler</div><div id="catGelir"></div></div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-hd">6 Aylık Karşılaştırma</div>
+        <div class="bar-area" id="barChart" style="height:120px"></div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:4px;font-size:.65rem;color:var(--t3)"><div style="width:8px;height:8px;background:var(--green2);border-radius:2px"></div>Gelir</div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:.65rem;color:var(--t3)"><div style="width:8px;height:8px;background:var(--red2);border-radius:2px"></div>Gider</div>
+        </div>
+      </div>
+      <div class="card"><div class="card-hd">Bu Ay Özeti</div><div id="monthlySummary"></div></div>
+    </div>
+  </div>
+
+  <!-- ══ TAKVİM ══ -->
+  <div class="page" id="page-takvim">
+    <div class="ph">
+      <div class="ph-left"><div class="ph-title">Takvim <em>Görünümü</em></div><div class="ph-sub">İşlemleri takvimde takip et</div></div>
+    </div>
+    <div class="card">
+      <div class="cal-nav">
+        <button class="mn-btn" onclick="changeMonth(-1);renderCalendar()">‹</button>
+        <div class="cal-title" id="calTitle"></div>
+        <button class="mn-btn" onclick="changeMonth(1);renderCalendar()">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+    <div class="card" id="calDayDetail" style="margin-top:12px;display:none">
+      <div class="card-hd" id="calDayTitle">Seçili Gün</div>
+      <div class="tx-list" id="calDayTx"></div>
+    </div>
+  </div>
+
+  <!-- ══ HESAPLAR ══ -->
+  <div class="page" id="page-hesaplar">
+    <div class="ph">
+      <div class="ph-left"><div class="ph-title">Banka <em>Hesapları</em></div><div class="ph-sub">Tüm hesaplar ve kartlar</div></div>
+      <div class="ph-actions"><button class="btn btn-ghost" onclick="openModal('accModal')">＋ Hesap Ekle</button></div>
+    </div>
+    <div class="g3 mb20" id="accGrid"></div>
+    <div class="card">
+      <div class="card-hd">Hesap İşlemleri <span id="accTxTitle" style="font-size:.65rem;color:var(--t3);text-transform:none;letter-spacing:0"></span></div>
+      <div class="tx-list" id="accTxList" style="max-height:300px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- ══ BORÇLAR ══ -->
+  <div class="page" id="page-borclar">
+    <div class="ph">
+      <div class="ph-left"><div class="ph-title">Borç <em>Takibi</em></div><div class="ph-sub">Krediler, borçlar ve alacaklar</div></div>
+      <div class="ph-actions"><button class="btn btn-ghost" onclick="openModal('debtModal')">＋ Borç Ekle</button></div>
+    </div>
+    <div class="g4 mb20" id="debtKpi"></div>
+    <div class="g2">
+      <div class="card"><div class="card-hd">Borçlarım</div><div id="debtList"></div></div>
+      <div class="card"><div class="card-hd">Alacaklarım</div><div id="alacakList"></div></div>
+    </div>
+  </div>
+
+  <!-- ══ HEDEFLER ══ -->
+  <div class="page" id="page-hedefler">
+    <div class="ph">
+      <div class="ph-left"><div class="ph-title">Birikim <em>Hedefleri</em></div><div class="ph-sub">Finansal hedefler ve bütçe limitleri</div></div>
+      <div class="ph-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openModal('budgetModal')">＋ Bütçe Limiti</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('goalModal')">＋ Birikim Hedefi</button>
+      </div>
+    </div>
+    <div class="g2 mb12">
+      <div class="card"><div class="card-hd">Bütçe Limitleri</div><div id="budgetList"></div></div>
+      <div class="card"><div class="card-hd">Birikim Hedefleri</div><div id="goalList"></div></div>
+    </div>
+    <div class="card"><div class="card-hd">Genel Performans</div><div id="budgetPerf"></div></div>
+  </div>
+
+  <!-- ══ TEKRARLAYAN ══ -->
+  <div class="page" id="page-tekrarlayan">
+    <div class="ph">
+      <div class="ph-left"><div class="ph-title">Tekrarlayan <em>İşlemler</em></div><div class="ph-sub">Otomatik periyodik kayıtlar</div></div>
+      <div class="ph-actions"><button class="btn btn-ghost" onclick="openModal('recModal')">＋ Ekle</button></div>
+    </div>
+    <div class="g2">
+      <div class="card"><div class="card-hd">Aktif Tekrarlayan</div><div id="recList"></div></div>
+      <div class="card"><div class="card-hd">Bu Ay Beklenen</div><div id="recExpected"></div></div>
+    </div>
+  </div>
+
+  <!-- ══ AYARLAR ══ -->
+  <div class="page" id="page-ayarlar">
+    <div class="ph"><div class="ph-left"><div class="ph-title">Uygulama <em>Ayarları</em></div><div class="ph-sub">Tema, para birimi, kategoriler, veriler</div></div></div>
+    <div class="g2">
+      <div>
+        <div class="card mb12">
+          <div class="card-hd">🎨 Tema</div>
+          <div class="swatch-row">
+            <div class="swatch on" style="background:#080a0f" id="sw-dark" onclick="setTheme('dark',this)" title="Koyu"></div>
+            <div class="swatch" style="background:#f1f0f8;border:1px solid #ccc" id="sw-light" onclick="setTheme('light',this)" title="Açık"></div>
+            <div class="swatch" style="background:#0a0806" id="sw-warm" onclick="setTheme('warm',this)" title="Sıcak"></div>
+          </div>
+        </div>
+        <div class="card mb12">
+          <div class="card-hd">💱 Görüntü Para Birimi</div>
+          <div id="cxSelect" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+        <div class="card mb12">
+          <div class="card-hd">🏷️ Özel Gider Kategorileri</div>
+          <div class="cat-pills" id="customCatsGList"></div>
+          <div class="cat-add-row">
+            <input class="field" id="newCatG" placeholder="Yeni kategori…" style="margin:0" onkeydown="if(event.key==='Enter')addCustomCat('G')">
+            <button class="btn btn-ghost btn-sm" onclick="addCustomCat('G')">＋</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd">🏷️ Özel Gelir Kategorileri</div>
+          <div class="cat-pills" id="customCatsIList"></div>
+          <div class="cat-add-row">
+            <input class="field" id="newCatI" placeholder="Yeni kategori…" style="margin:0" onkeydown="if(event.key==='Enter')addCustomCat('I')">
+            <button class="btn btn-ghost btn-sm" onclick="addCustomCat('I')">＋</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card mb12">
+          <div class="card-hd">⚙ Tercihler</div>
+          <div class="set-row"><div class="set-info"><div class="set-name">Otomatik Kur Güncelleme</div><div class="set-desc">Her açılışta kurları güncelle</div></div><button class="tog on" id="tog-autoRate" onclick="togglePref('autoRate',this)"></button></div>
+          <div class="set-row"><div class="set-info"><div class="set-name">Vade & Bütçe Uyarıları</div><div class="set-desc">Bildirim panelinde uyarı göster</div></div><button class="tog on" id="tog-alerts" onclick="togglePref('alertsEnabled',this)"></button></div>
+          <div class="set-row"><div class="set-info"><div class="set-name">Tekrarlayan Bildirim</div><div class="set-desc">Otomatik ekleme uyarısı</div></div><button class="tog" id="tog-recNotif" onclick="togglePref('recNotif',this)"></button></div>
+        </div>
+        <div class="card mb12">
+          <div class="card-hd">📈 Döviz Kurları</div>
+          <div id="ratesList"></div>
+          <button class="btn btn-ghost w100" style="margin-top:12px" onclick="fetchRates()">⟳ Güncelle</button>
+        </div>
+        <div class="card mb12">
+          <div class="card-hd">⚡ Şablonlar</div>
+          <div id="tmplSettingsList"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">🗄 Veri Yönetimi</div>
+          <button class="btn btn-ghost w100 mb12" onclick="exportCSV()">📥 CSV Dışa Aktar</button>
+          <button class="btn btn-ghost w100 mb12" onclick="exportPDF()">📄 PDF Rapor</button>
+          <button class="btn w100" style="background:var(--red-d);color:var(--red2)" onclick="clearData()">Tüm Verileri Sil</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /scroll -->
+
+  <!-- SUMMARY PANEL -->
+  <div class="summary-panel" id="summaryPanel">
+    <div class="sp-title">Bu Ay</div>
+    <div class="sp-kpi"><div class="sp-kpi-l">Net Bakiye</div><div class="sp-kpi-v" id="spNet">—</div><div class="sp-kpi-s" id="spNetS"></div></div>
+    <div class="sp-kpi"><div class="sp-kpi-l">Toplam Gelir</div><div class="sp-kpi-v c-green" id="spGelir">—</div></div>
+    <div class="sp-kpi"><div class="sp-kpi-l">Toplam Gider</div><div class="sp-kpi-v c-red" id="spGider">—</div></div>
+    <div class="sp-sec">Hesaplar</div><div id="spAccounts"></div>
+    <div class="sp-sec">Bütçe</div><div id="spBudget"></div>
+    <div class="sp-sec">Aktif Borçlar</div><div id="spDebts"></div>
+    <div class="cx-mini" id="spRates"></div>
+  </div>
+
+  </div>
+</div><!-- /content -->
+</div><!-- /app -->
+
+<!-- ══ MODALS ══ -->
+
+<!-- ADD ENTRY -->
+<div class="overlay off" id="addModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Yeni Kayıt</div><button class="modal-x" onclick="closeModal('addModal')">×</button></div>
+    <!-- RECEIPT OCR -->
+    <div class="receipt-area" id="receiptArea" onclick="triggerReceiptUpload()" title="Fiş/Fatura fotoğrafı yükle — AI ile otomatik doldur">
+      <div class="receipt-label">📷 Fiş / Fatura Fotoğrafı</div>
+      <div class="receipt-sub" id="receiptSub">Fotoğraf yükle → AI otomatik doldurur</div>
+      <img id="receiptPreview" class="receipt-img" style="display:none">
+    </div>
+    <input type="file" id="receiptInput" accept="image/*" style="display:none" onchange="handleReceiptUpload(event)">
+    <!-- QUICK TEMPLATES -->
+    <div id="modalTmplWrap">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.52rem;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:6px">⚡ Şablonlar</div>
+      <div class="tmpl-grid" id="modalTmplGrid"></div>
+    </div>
+    <div class="seg">
+      <button class="seg-b ag" id="mG" onclick="setMT('gelir')">↑ Gelir</button>
+      <button class="seg-b" id="mR" onclick="setMT('gider')">↓ Gider</button>
+    </div>
+    <div class="field"><label>Açıklama</label><input id="mDesc" placeholder="Maaş, Kira, Market…"></div>
+    <div class="g2">
+      <div class="field">
+        <label>Tutar</label>
+        <div class="amt-cx-row">
+          <input type="number" id="mAmt" placeholder="0.00" min="0" step="0.01">
+          <select class="cx-sel" id="mTxCx"></select>
+        </div>
+      </div>
+      <div class="field"><label>Kategori</label><select id="mCat"></select></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Hesap</label><select id="mAcc"></select></div>
+      <div class="field"><label>Etiket</label><input id="mTag" placeholder="opsiyonel"></div>
+    </div>
+    <div class="field"><label>Not</label><textarea id="mNote" placeholder="not…"></textarea></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-g" id="mBtn" onclick="addEntryModal()" style="flex:1">Kaydet</button>
+      <button class="btn btn-ghost btn-sm" onclick="saveTemplateModal()" title="Şablon olarak kaydet">⚡ Şablon</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD ACCOUNT -->
+<div class="overlay off" id="accModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Hesap Ekle</div><button class="modal-x" onclick="closeModal('accModal')">×</button></div>
+    <div class="field"><label>Hesap Adı</label><input id="aN" placeholder="Ziraat, Akbank, Nakit…"></div>
+    <div class="g2">
+      <div class="field"><label>Tür</label>
+        <select id="aT"><option value="banka">Banka Hesabı</option><option value="kredi">Kredi Kartı</option><option value="nakit">Nakit</option><option value="yatirim">Yatırım</option><option value="dijital">Dijital Cüzdan</option></select></div>
+      <div class="field"><label>Başlangıç Bakiyesi</label><input type="number" id="aBal" placeholder="0.00"></div>
+    </div>
+    <div class="field"><label>Son 4 Hane (opsiyonel)</label><input id="aNum" placeholder="1234" maxlength="4"></div>
+    <div class="field"><label>Renk</label><div style="display:flex;gap:6px;flex-wrap:wrap;padding:4px 0" id="accColorPicker"></div></div>
+    <button class="btn btn-v" onclick="addAccount()">Hesap Ekle</button>
+  </div>
+</div>
+
+<!-- ADD DEBT -->
+<div class="overlay off" id="debtModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Borç / Alacak Ekle</div><button class="modal-x" onclick="closeModal('debtModal')">×</button></div>
+    <div class="seg">
+      <button class="seg-b ar" id="dTypB" onclick="setDebtType('borc')">↑ Borcum</button>
+      <button class="seg-b" id="dTypA" onclick="setDebtType('alacak')">↓ Alacağım</button>
+    </div>
+    <div class="field"><label>Açıklama / Kişi / Kurum</label><input id="dN" placeholder="Ev kredisi, Ahmet'e borç…"></div>
+    <div class="g2">
+      <div class="field"><label>Toplam Tutar</label><input type="number" id="dTotal" placeholder="0.00"></div>
+      <div class="field"><label>Ödenen</label><input type="number" id="dPaid" placeholder="0.00"></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Vade / Son Tarih</label><input type="date" id="dDue"></div>
+      <div class="field"><label>Tür</label><select id="dCat"><option>Kredi</option><option>Kişisel Borç</option><option>Kredi Kartı</option><option>Taksit</option><option>Diğer</option></select></div>
+    </div>
+    <div class="field"><label>Not</label><textarea id="dNote" placeholder="not…"></textarea></div>
+    <button class="btn btn-v" onclick="addDebt()">Ekle</button>
+  </div>
+</div>
+
+<!-- ADD BUDGET -->
+<div class="overlay off" id="budgetModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Bütçe Limiti</div><button class="modal-x" onclick="closeModal('budgetModal')">×</button></div>
+    <div class="field"><label>Kategori</label><select id="bCat"></select></div>
+    <div class="field"><label>Aylık Limit</label><input type="number" id="bLim" placeholder="0.00"></div>
+    <button class="btn btn-v" onclick="addBudget()">Limit Ekle</button>
+  </div>
+</div>
+
+<!-- ADD GOAL -->
+<div class="overlay off" id="goalModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Birikim Hedefi</div><button class="modal-x" onclick="closeModal('goalModal')">×</button></div>
+    <div class="field"><label>Hedef Adı</label><input id="gName" placeholder="Araba, Tatil, Acil Fon…"></div>
+    <div class="g2">
+      <div class="field"><label>Hedef Tutar</label><input type="number" id="gTarget" placeholder="0.00"></div>
+      <div class="field"><label>Mevcut Birikim</label><input type="number" id="gCurrent" placeholder="0.00"></div>
+    </div>
+    <div class="field"><label>Hedef Tarih</label><input type="date" id="gDate"></div>
+    <button class="btn btn-v" onclick="addGoal()">Hedef Ekle</button>
+  </div>
+</div>
+
+<!-- ADD RECURRING -->
+<div class="overlay off" id="recModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">Tekrarlayan İşlem</div><button class="modal-x" onclick="closeModal('recModal')">×</button></div>
+    <div class="seg">
+      <button class="seg-b ag" id="rG" onclick="setRT('gelir')">↑ Gelir</button>
+      <button class="seg-b" id="rR" onclick="setRT('gider')">↓ Gider</button>
+    </div>
+    <div class="field"><label>Açıklama</label><input id="rDesc" placeholder="Kira, Maaş, Netflix…"></div>
+    <div class="g2">
+      <div class="field"><label>Tutar</label><input type="number" id="rAmt" placeholder="0.00"></div>
+      <div class="field"><label>Kategori</label><select id="rCat"></select></div>
+    </div>
+    <div class="g2">
+      <div class="field"><label>Sıklık</label><select id="rFreq"><option value="monthly">Aylık</option><option value="weekly">Haftalık</option><option value="yearly">Yıllık</option></select></div>
+      <div class="field"><label>Gün (1–28)</label><input type="number" id="rDay" placeholder="1" min="1" max="28"></div>
+    </div>
+    <button class="btn btn-v" onclick="addRecurring()">Ekle</button>
+  </div>
+</div>
+
+<!-- AMOUNT ACTION MODAL -->
+<div class="overlay off" id="amountModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="amountTitle">Tutar Ekle</div><button class="modal-x" onclick="closeModal('amountModal')">×</button></div>
+    <input type="hidden" id="amountKind">
+    <input type="hidden" id="amountTargetId">
+    <div class="field"><label id="amountLabel">Tutar</label><input type="number" id="amountValue" placeholder="0.00" min="0" step="0.01"></div>
+    <button class="btn btn-v" data-action="submit-amount">Kaydet</button>
+  </div>
+</div>
+
+<!-- MOBILE NAV -->
+<nav class="mob-bar" id="mobBar">
+  <div class="mob-ni active" id="mob-ozet" onclick="mobNav('ozet')"><div class="mob-ni-icon">◈</div><div class="mob-ni-label">Özet</div></div>
+  <div class="mob-ni" id="mob-islemler" onclick="mobNav('islemler')"><div class="mob-ni-icon">↕</div><div class="mob-ni-label">İşlem</div></div>
+  <div class="mob-ni" id="mob-hesaplar" onclick="mobNav('hesaplar')"><div class="mob-ni-icon">◎</div><div class="mob-ni-label">Hesap</div></div>
+  <div class="mob-ni" id="mob-hedefler" onclick="mobNav('hedefler')"><div class="mob-ni-icon">◇</div><div class="mob-ni-label">Hedef</div></div>
+  <div class="mob-ni" id="mob-more" onclick="toggleDrawer()">
+    <div style="display:flex;gap:2px;align-items:center;justify-content:center"><div class="mob-more-dot"></div><div class="mob-more-dot"></div><div class="mob-more-dot"></div></div>
+    <div class="mob-ni-label">Daha</div>
+  </div>
+</nav>
+<div class="mob-overlay" id="mobOverlay" onclick="closeDrawer()"></div>
+<div class="mob-drawer" id="mobDrawer">
+  <div class="mob-drawer-handle"></div>
+  <div class="mob-drawer-title">Diğer Sayfalar</div>
+  <div class="mob-drawer-grid">
+    <div class="mob-drawer-item" id="mdi-analiz" onclick="mobNav('analiz');closeDrawer()"><div class="mdi-icon">△</div><div class="mdi-label">Analiz</div></div>
+    <div class="mob-drawer-item" id="mdi-takvim" onclick="mobNav('takvim');closeDrawer()"><div class="mdi-icon">▦</div><div class="mdi-label">Takvim</div></div>
+    <div class="mob-drawer-item" id="mdi-borclar" onclick="mobNav('borclar');closeDrawer()"><div class="mdi-icon">⚠</div><div class="mdi-label">Borçlar</div></div>
+    <div class="mob-drawer-item" id="mdi-tekrarlayan" onclick="mobNav('tekrarlayan');closeDrawer()"><div class="mdi-icon">↻</div><div class="mdi-label">Tekrarlayan</div></div>
+    <div class="mob-drawer-item" id="mdi-ayarlar" onclick="mobNav('ayarlar');closeDrawer()"><div class="mdi-icon">⚙</div><div class="mdi-label">Ayarlar</div></div>
+  </div>
+  <div style="margin-top:14px">
+    <button onclick="openModal('addModal');closeDrawer()" style="width:100%;padding:13px;background:var(--violet);border:none;border-radius:10px;color:#fff;font-size:.85rem;font-weight:700;cursor:pointer">＋ Yeni Kayıt Ekle</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+<script src="scripts/state.js"></script>
+<script src="scripts/features/transactions.js"></script>
+<script src="scripts/features/debts.js"></script>
+<script src="scripts/features/goals.js"></script>
+<script src="scripts/features/recurring.js"></script>
+<script src="scripts/features/settings.js"></script>
+<script src="scripts/ui.js"></script>
+
+</body>
 </html>
