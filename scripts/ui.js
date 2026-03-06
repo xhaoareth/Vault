@@ -381,79 +381,191 @@ async function exportPDF(){
   try{
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const W=210,margin=18;let y=margin;
+    const W=210,H=297,margin=14,contentW=W-margin*2;
+    let y=margin;
+
     const md=getME();
     const tG=md.filter(e=>e.type==='gelir').reduce((s,e)=>s+e.amount,0);
     const tR=md.filter(e=>e.type==='gider').reduce((s,e)=>s+e.amount,0);
     const net=tG-tR;
+
+    const addPageIfNeeded=(need=12)=>{
+      if(y+need<=H-16)return;
+      doc.addPage();
+      y=margin;
+    };
+    const sectionTitle=(title)=>{
+      addPageIfNeeded(12);
+      doc.setFillColor(243,236,255);
+      doc.roundedRect(margin,y,contentW,8,2,2,'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(10);
+      doc.setTextColor(85,56,170);
+      doc.text(title,margin+3,y+5.3);
+      y+=11;
+    };
+
     // Header
-    doc.setFillColor(139,92,246);doc.roundedRect(margin,y,W-margin*2,14,3,3,'F');
-    doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
-    doc.text('FinVault — Aylik Rapor',margin+6,y+9);
-    y+=20;
-    // Period
-    doc.setTextColor(120,120,140);doc.setFontSize(9);doc.setFont('helvetica','normal');
-    doc.text(`${MONTHS[vDate.getMonth()]} ${vDate.getFullYear()}  ·  Olusturuldu: ${new Date().toLocaleDateString('tr-TR')}`,margin,y);
-    y+=8;
-    // KPI row
-    const kpis=[{l:'Toplam Gelir',v:fc(tG),c:[52,211,153]},{l:'Toplam Gider',v:fc(tR),c:[248,113,113]},{l:'Net Bakiye',v:fc(Math.abs(net)),c:[167,139,250]},{l:'Islem Sayisi',v:md.length+'',c:[251,191,36]}];
-    const kpiW=(W-margin*2-9)/4;
+    doc.setFillColor(76,29,149);
+    doc.roundedRect(margin,y,contentW,18,3,3,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(15);
+    doc.setTextColor(255,255,255);
+    doc.text('FinVault Finansal Rapor (v2)',margin+4,y+7.6);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8.5);
+    doc.text(`${MONTHS[vDate.getMonth()]} ${vDate.getFullYear()} · Olusturma: ${new Date().toLocaleString('tr-TR')}`,margin+4,y+13.2);
+    y+=24;
+
+    // KPI Cards
+    const kpis=[
+      {l:'Gelir',v:fc(tG),bg:[220,252,231],tc:[22,101,52]},
+      {l:'Gider',v:fc(tR),bg:[254,226,226],tc:[153,27,27]},
+      {l:'Net',v:`${net>=0?'+':'-'}${fc(Math.abs(net))}`,bg:[237,233,254],tc:[91,33,182]},
+      {l:'Islem',v:String(md.length),bg:[254,243,199],tc:[120,53,15]}
+    ];
+    const gap=3;
+    const cardW=(contentW-gap*3)/4;
     kpis.forEach((k,i)=>{
-      const x=margin+i*(kpiW+3);
-      doc.setFillColor(30,31,42);doc.roundedRect(x,y,kpiW,16,2,2,'F');
-      doc.setTextColor(...k.c);doc.setFontSize(7);doc.text(k.l.toUpperCase(),x+3,y+6);
-      doc.setFontSize(11);doc.setFont('helvetica','bold');doc.text(k.v,x+3,y+13);
+      const x=margin+i*(cardW+gap);
+      doc.setFillColor(...k.bg);
+      doc.roundedRect(x,y,cardW,16,2,2,'F');
+      doc.setTextColor(...k.tc);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      doc.text(k.l.toUpperCase(),x+3,y+5.5);
+      doc.setFontSize(10.5);
+      doc.text(k.v,x+3,y+12.2);
     });
-    y+=22;
-    // Transactions table
-    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(240,238,255);
-    doc.text('Islemler',margin,y);y+=5;
-    doc.setFillColor(30,31,42);doc.rect(margin,y,W-margin*2,7,'F');
-    doc.setTextColor(92,89,112);doc.setFontSize(7);doc.setFont('helvetica','normal');
-    doc.text('Tarih',margin+2,y+4.5);doc.text('Aciklama',margin+22,y+4.5);
-    doc.text('Kategori',margin+90,y+4.5);doc.text('Tutar',margin+130,y+4.5);doc.text('Tur',margin+160,y+4.5);
-    y+=7;
-    const slice=md.slice(0,30);
-    slice.forEach((e,i)=>{
-      if(y>270){doc.addPage();y=margin}
-      if(i%2===0){doc.setFillColor(20,23,32);doc.rect(margin,y,W-margin*2,6,'F')}
-      const d=new Date(e.date);
-      doc.setTextColor(240,238,255);doc.setFontSize(7);
-      doc.text(`${d.getDate()}.${d.getMonth()+1}`,margin+2,y+4.3);
-      doc.text((e.desc||'').slice(0,28),margin+22,y+4.3);
-      doc.text((e.category||'').slice(0,18),margin+90,y+4.3);
-      if(e.type==='gelir')doc.setTextColor(52,211,153);else doc.setTextColor(248,113,113);
-      doc.text(`${e.type==='gelir'?'+':'-'}${fc(e.amount)}`,margin+130,y+4.3);
-      doc.setTextColor(155,152,176);
-      doc.text(e.type==='gelir'?'Gelir':'Gider',margin+160,y+4.3);
-      y+=6;
+    y+=20;
+
+    // Top categories
+    sectionTitle('Kategori Ozeti');
+    const giderByCat={};
+    const gelirByCat={};
+    md.forEach(e=>{
+      const box=e.type==='gider'?giderByCat:gelirByCat;
+      box[e.category]=(box[e.category]||0)+e.amount;
     });
-    if(md.length>30){doc.setTextColor(92,89,112);doc.setFontSize(7);doc.text(`... ve ${md.length-30} islem daha`,margin,y+4);y+=8}
-    y+=6;
-    // Budget section
-    if(D.budgets.length){
-      if(y>240)doc.addPage(),y=margin;
-      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(240,238,255);doc.text('Butce Durum',margin,y);y+=5;
-      const ge=md.filter(e=>e.type==='gider');
-      D.budgets.forEach(b=>{
-        if(y>275){doc.addPage();y=margin}
-        const s=ge.filter(e=>e.category===b.cat).reduce((x,e)=>x+e.amount,0);
-        const p=Math.min((s/b.limit)*100,100);const ov=s>b.limit;
-        doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(240,238,255);
-        doc.text(`${b.cat}: ${fc(s)} / ${fc(b.limit)} (${Math.round(p)}%)`,margin,y+4);
-        doc.setFillColor(36,40,56);doc.roundedRect(margin+80,y+1,80,4,1,1,'F');
-        doc.setFillColor(...(ov?[239,68,68]:p>80?[245,158,11]:[16,185,129]));
-        doc.roundedRect(margin+80,y+1,Math.max(1,p*0.8),4,1,1,'F');
-        y+=8;
+    const topGider=Object.entries(giderByCat).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    const topGelir=Object.entries(gelirByCat).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+    const catCol=(title,color,list,x)=>{
+      doc.setTextColor(...color);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8.5);
+      doc.text(title,x,y);
+      let cy=y+4;
+      if(!list.length){
+        doc.setTextColor(115,115,115);
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(8);
+        doc.text('Veri yok',x,cy);
+        return;
+      }
+      list.forEach(([cat,val],i)=>{
+        doc.setTextColor(31,41,55);
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(8);
+        doc.text(`${i+1}. ${(cat||'Genel').slice(0,22)}`,x,cy);
+        doc.setTextColor(...color);
+        doc.text(fc(val),x+60,cy,{align:'right'});
+        cy+=4.2;
+      });
+    };
+    catCol('En Yuksek Giderler',[185,28,28],topGider,margin+2);
+    catCol('En Yuksek Gelirler',[21,128,61],topGelir,margin+contentW/2+2);
+    y+=20;
+
+    // Budget summary
+    sectionTitle('Butce ve Borc Durumu');
+    const ge=md.filter(e=>e.type==='gider');
+    const budgetRows=(D.budgets||[]).slice(0,4);
+    if(!budgetRows.length){
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(107,114,128);
+      doc.text('Butce limiti tanimli degil.',margin+2,y);y+=6;
+    }else{
+      budgetRows.forEach(b=>{
+        addPageIfNeeded(8);
+        const spent=ge.filter(e=>e.category===b.cat).reduce((s,e)=>s+e.amount,0);
+        const pct=Math.min((spent/b.limit)*100,100);
+        const over=spent>b.limit;
+        doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(31,41,55);
+        doc.text(`${(b.cat||'Kategori').slice(0,18)}: ${fc(spent)} / ${fc(b.limit)}`,margin+2,y);
+        doc.setFillColor(229,231,235);
+        doc.roundedRect(margin+98,y-3.5,58,3.6,1,1,'F');
+        doc.setFillColor(...(over?[220,38,38]:pct>80?[217,119,6]:[22,163,74]));
+        doc.roundedRect(margin+98,y-3.5,Math.max(1,58*(pct/100)),3.6,1,1,'F');
+        doc.setTextColor(75,85,99);
+        doc.text(`%${Math.round(pct)}`,margin+160,y);
+        y+=5.2;
       });
     }
-    // Footer
-    doc.setFontSize(7);doc.setTextColor(58,56,80);
-    doc.text(`FinVault — Kisisel Finans Takip · ${new Date().toLocaleString('tr-TR')}`,margin,292);
-    doc.save(`finvault-${MONTHS[vDate.getMonth()]}-${vDate.getFullYear()}.pdf`);
-    toast('PDF indirildi ✓','green');el('expDd').classList.add('off');
+
+    const activeDebts=(D.debts||[]).filter(d=>(d.paid||0)<(d.total||0));
+    const debtTotal=activeDebts.reduce((s,d)=>s+Math.max(0,(d.total||0)-(d.paid||0)),0);
+    doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(146,64,14);
+    doc.text(`Aktif borc kaydi: ${activeDebts.length} · Kalan toplam: ${fc(debtTotal)}`,margin+2,y+2);
+    y+=8;
+
+    // Transaction detail
+    sectionTitle('Son Islemler');
+    doc.setFillColor(249,250,251);
+    doc.rect(margin,y-2,contentW,6,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(55,65,81);
+    doc.text('Tarih',margin+2,y+2);
+    doc.text('Aciklama',margin+24,y+2);
+    doc.text('Kategori',margin+94,y+2);
+    doc.text('Tur',margin+136,y+2);
+    doc.text('Tutar',margin+160,y+2);
+    y+=6;
+
+    const rows=md.slice(0,40);
+    if(!rows.length){
+      addPageIfNeeded(8);
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(8.5);
+      doc.setTextColor(107,114,128);
+      doc.text('Bu ay kayitli islem yok. Yeni islem ekledikten sonra detaylar burada listelenir.',margin+2,y+3.8);
+      y+=8;
+    }
+    rows.forEach((e,i)=>{
+      addPageIfNeeded(6);
+      if(i%2===0){doc.setFillColor(252,252,252);doc.rect(margin,y-2,contentW,5.2,'F');}
+      const d=new Date(e.date);
+      const t=`${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}`;
+      doc.setFont('helvetica','normal');doc.setFontSize(7.5);
+      doc.setTextColor(31,41,55);doc.text(t,margin+2,y+1.6);
+      doc.text((e.desc||'').slice(0,32),margin+24,y+1.6);
+      doc.text((e.category||'').slice(0,14),margin+94,y+1.6);
+      doc.setTextColor(75,85,99);doc.text(e.type==='gelir'?'Gelir':'Gider',margin+136,y+1.6);
+      doc.setTextColor(...(e.type==='gelir'?[22,163,74]:[220,38,38]));
+      doc.text(`${e.type==='gelir'?'+':'-'}${fc(e.amount)}`,margin+160,y+1.6);
+      y+=5;
+    });
+    if(md.length>40){
+      addPageIfNeeded(6);
+      doc.setFont('helvetica','italic');doc.setFontSize(7.2);doc.setTextColor(107,114,128);
+      doc.text(`... ve ${md.length-40} islem daha`,margin+2,y+2);
+      y+=6;
+    }
+
+    // Footer pages
+    const pages=doc.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+      doc.setPage(i);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7);
+      doc.setTextColor(148,163,184);
+      doc.text(`FinVault · Sayfa ${i}/${pages}`,margin,H-6);
+    }
+
+    doc.save(`finvault-rapor-${MONTHS[vDate.getMonth()]}-${vDate.getFullYear()}.pdf`);
+    toast('PDF raporu (v2) indirildi ✓','green');
+    el('expDd').classList.add('off');
   }catch(e){
-    toast('PDF oluşturulamadı','red');console.error(e);
+    toast('PDF oluşturulamadı','red');
+    console.error(e);
   }
 }
 
